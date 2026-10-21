@@ -3,7 +3,7 @@ CREATE OR REPLACE FUNCTION public.kiosk_api(op text, payload jsonb DEFAULT '{}':
  LANGUAGE plpgsql
  SET search_path TO ''
 AS $function$
-declare s kiosk_private.sessions%rowtype;a kiosk_private.accounts%rowtype;v kiosk_private.visits%rowtype;tok text;target text;result jsonb;days int;mx int;cnt int;
+declare s kiosk_private.sessions%rowtype;a kiosk_private.accounts%rowtype;v kiosk_private.visits%rowtype;tok text;target text;result jsonb;days int;mx int;cnt int;query_date date;query_text text;page_no int;page_size int;visit_mode text;where_start timestamptz;where_end timestamptz;
 begin
  select retention_days,max_number into days,mx from kiosk_private.settings where id;
  if days>0 then delete from kiosk_private.visits where status in ('done','cancelled') and created<now()-make_interval(days=>days);end if;
@@ -46,9 +46,27 @@ begin
   return jsonb_build_object('ok',true,'position',(select count(*) from kiosk_private.visits where status='waiting' and seq<=v.seq));
  end if;
  if s.role<>'teacher' then return jsonb_build_object('error','선생님 계정만 사용할 수 있어요.','code',403);end if;
+
  if op='visits' then
-  select coalesce(jsonb_agg(to_jsonb(q) order by q.seq),'[]') into result from (select *,case when status='waiting' then sum(case when status='waiting' then 1 else 0 end) over(order by seq) else null end as position from kiosk_private.visits) q;
-  return jsonb_build_object('visits',result,'settings',jsonb_build_object('max_number',mx::text,'retention_days',days::text));
+  visit_mode=coalesce(payload->>'mode','active');
+  if visit_mode not in ('active','history','settings') then return jsonb_build_object('error','조회 조건을 확인해 주세요.','code',400);end if;
+  if coalesce(payload->>'touch','false')='true' then update kiosk_private.sessions set expires=now()+interval '15 minutes' where token_hash=s.token_hash;end if;
+  select jsonb_build_object('waiting',count(*) filter(where status='waiting'),'treating',count(*) filter(where status='treating')) into result from kiosk_private.visits;
+  if visit_mode='settings' then return jsonb_build_object('visits','[]'::jsonb,'counts',result,'settings',jsonb_build_object('max_number',mx::text,'retention_days',days::text));end if;
+  if visit_mode='active' then
+   select coalesce(jsonb_agg(to_jsonb(q) order by q.seq),'[]') into result from (select *,case when status='waiting' then sum(case when status='waiting' then 1 else 0 end) over(order by seq) else null end as position from kiosk_private.visits where status in ('waiting','treating')) q;
+   return jsonb_build_object('visits',result,'counts',jsonb_build_object('waiting',(select count(*) from kiosk_private.visits where status='waiting'),'treating',(select count(*) from kiosk_private.visits where status='treating')),'settings',jsonb_build_object('max_number',mx::text,'retention_days',days::text));
+  end if;
+  query_date=nullif(payload->>'date','')::date;query_text=coalesce(payload->>'query','');page_no=coalesce((payload->>'page')::int,0);page_size=coalesce((payload->>'limit')::int,50);
+  if page_no not between 0 and 100000 or page_size not between 1 and 200 or char_length(query_text)>200 or coalesce(payload->>'status','') not in ('','waiting','treating','done','cancelled') then return jsonb_build_object('error','조회 조건을 확인해 주세요.','code',400);end if;
+  where_start=query_date::timestamp at time zone 'Asia/Seoul';where_end=(query_date+1)::timestamp at time zone 'Asia/Seoul';
+  select count(*) into cnt from kiosk_private.visits x where (query_date is null or (x.created>=where_start and x.created<where_end))
+ and (coalesce(payload->>'status','')='' or x.status=payload->>'status')
+ and not exists(select 1 from regexp_split_to_table(lower(query_text),E'\\s+') as term where term<>'' and strpos(lower(x.grade::text||'학년 '||x.room::text||'반 '||x.num::text||'번 '||x.symptoms::text||' '||case x.status when 'waiting' then '대기' when 'treating' then '진료중' when 'done' then '완료' else '취소' end),term)=0);
+  select coalesce(jsonb_agg(to_jsonb(q) order by q.seq desc),'[]') into result from (select x.* from kiosk_private.visits x where (query_date is null or (x.created>=where_start and x.created<where_end))
+ and (coalesce(payload->>'status','')='' or x.status=payload->>'status')
+ and not exists(select 1 from regexp_split_to_table(lower(query_text),E'\\s+') as term where term<>'' and strpos(lower(x.grade::text||'학년 '||x.room::text||'반 '||x.num::text||'번 '||x.symptoms::text||' '||case x.status when 'waiting' then '대기' when 'treating' then '진료중' when 'done' then '완료' else '취소' end),term)=0) and (payload->>'beforeSeq' is null or x.seq<(payload->>'beforeSeq')::bigint) order by x.seq desc limit page_size offset case when payload->>'beforeSeq' is null then page_no*page_size else 0 end) q;
+  return jsonb_build_object('visits',result,'total',cnt,'page',page_no,'pageSize',page_size,'counts',jsonb_build_object('waiting',(select count(*) from kiosk_private.visits where status='waiting'),'treating',(select count(*) from kiosk_private.visits where status='treating')),'settings',jsonb_build_object('max_number',mx::text,'retention_days',days::text));
  end if;
  update kiosk_private.sessions set expires=now()+interval '15 minutes' where token_hash=s.token_hash;
 
