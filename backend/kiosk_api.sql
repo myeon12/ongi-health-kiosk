@@ -17,10 +17,10 @@ begin
  if s.token_hash is null then return jsonb_build_object('error','접속 시간이 만료됐어요. 화면을 다시 열어 주세요.','code',401);end if;
  if op='public' then return jsonb_build_object('waiting',(select count(*) from kiosk_private.visits where status='waiting'),'maxNumber',mx);end if;
  if op='login' then
-  select * into a from kiosk_private.accounts where username=payload->>'username' and role='teacher' for update;
+  select * into a from kiosk_private.accounts where username='teacher' and role='teacher' for update;
   if a.username is null then return jsonb_build_object('error','계정 정보를 확인해 주세요.','code',403);end if;
   if a.locked_until>now() then return jsonb_build_object('error','5분 후 다시 시도해 주세요.','code',429);end if;
-  if extensions.crypt(coalesce(payload->>'password',''),a.password_hash)<>a.password_hash or coalesce(payload->>'pin','')<>'0119' then
+  if extensions.crypt(coalesce(payload->>'password',''),a.password_hash)<>a.password_hash then
    update kiosk_private.accounts set failures=case when failures>=4 then 0 else failures+1 end,locked_until=case when failures>=4 then now()+interval '5 minutes' else null end where username=a.username;
    return jsonb_build_object('error','계정 또는 비밀번호를 확인해 주세요.','code',403);
   end if;
@@ -91,4 +91,4 @@ begin
   return jsonb_build_object('ok',true);
  end if;
  return jsonb_build_object('error','지원하지 않는 요청이에요.','code',400);
-end $function$
+end $function$;
