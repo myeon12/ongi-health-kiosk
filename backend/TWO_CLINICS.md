@@ -6,7 +6,7 @@ For an existing deployment, apply setup-two-clinics.sql before kiosk_api.sql, th
 
 The application budget is shared across both clinics per UTC calendar month: 150,000 accepted RPC requests and 512 MiB estimated response traffic, with a 1 MiB reservation per response. At 80%, automatic requests stop. At the hard threshold, operations return a direct-contact message; a browser stores only the pause deadline to avoid repeated requests. Server estimates response JSON bytes plus 2 KiB per accepted request. Requests over 1 MiB require narrower filters.
 
-Automatic polling runs on visible pages only, Monday–Friday 07:00–18:00 Asia/Seoul: students 60 seconds, active teacher lists 15 seconds. Unchanged active lists return only a revision acknowledgement. Teachers lock after 15 minutes without input. Completed/cancelled records retain the configured period (initially 30 days).
+Automatic polling runs on visible pages only, Monday–Friday 09:00–14:40 Asia/Seoul: students 60 seconds, active teacher lists 15 seconds. Unchanged active lists return only a revision acknowledgement. Teachers lock after 15 minutes without input. Completed/cancelled records retain the configured period (initially 30 days).
 
 These are application limits, not provider billing controls. Invalid/blocked Edge Function invocations, request traffic, provider overhead, static site transfers, other projects and abuse are not fully counted. They cannot guarantee free-plan compliance. No paid upgrade is enabled by this implementation.
 
