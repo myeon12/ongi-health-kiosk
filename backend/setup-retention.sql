@@ -1,14 +1,15 @@
 create extension if not exists pg_cron;
-create or replace function kiosk_private.purge_expired_visits() returns integer language plpgsql security invoker set search_path='' as $$
-declare days integer;n integer;
+CREATE OR REPLACE FUNCTION kiosk_private.purge_expired_visits()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare n integer;
 begin
- select retention_days into days from kiosk_private.settings where id;
- if days is null or days<=0 then return 0;end if;
  perform pg_advisory_xact_lock(774019);
- delete from kiosk_private.visits where status in ('done','cancelled') and finished is not null and finished < now()-make_interval(days=>days);
- get diagnostics n = row_count;
- return n;
-end $$;
+ delete from kiosk_private.visits v using kiosk_private.clinic_settings c where v.clinic_id=c.clinic_id and c.retention_days>0 and v.status in ('done','cancelled') and v.finished is not null and v.finished<now()-make_interval(days=>c.retention_days);
+ get diagnostics n=row_count;return n;
+end $function$
+;
 revoke all on function kiosk_private.purge_expired_visits() from public,anon,authenticated,service_role;
-update kiosk_private.settings set retention_days=30 where id;
 select cron.schedule('kiosk-daily-retention','0 17 * * *','select kiosk_private.purge_expired_visits();');
