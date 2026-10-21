@@ -52,6 +52,16 @@ begin
  end if;
  update kiosk_private.sessions set expires=now()+interval '15 minutes' where token_hash=s.token_hash;
 
+
+ if op='delete_visit' then
+  if payload->>'confirm' is distinct from 'delete' or jsonb_typeof(payload->'version') is distinct from 'number' then return jsonb_build_object('error','삭제 요청을 확인해 주세요.','code',400);end if;
+  perform pg_advisory_xact_lock(774019);
+  select * into v from kiosk_private.visits where id=(payload->>'id')::uuid for update;
+  if v.id is null then return jsonb_build_object('error','이미 삭제됐거나 접수를 찾을 수 없어요.','code',404);end if;
+  if v.version is distinct from (payload->>'version')::int then return jsonb_build_object('error','다른 창에서 변경됐어요. 새로고침 후 다시 확인해 주세요.','code',409);end if;
+  delete from kiosk_private.visits where id=v.id;
+  return jsonb_build_object('ok',true);
+ end if;
  if op='reason' then
   if jsonb_typeof(payload->'symptoms') is distinct from 'array' then return jsonb_build_object('error','방문 사유를 확인해 주세요.','code',400);end if;
   if jsonb_array_length(payload->'symptoms') not between 1 and 12 or exists(select 1 from jsonb_array_elements(payload->'symptoms') x where jsonb_typeof(x)<>'string' or char_length(btrim(x#>>'{}')) not between 1 and 200) or jsonb_typeof(payload->'version') is distinct from 'number' then return jsonb_build_object('error','사유는 1~12개, 각 200자 이내로 입력해 주세요.','code',400);end if;
