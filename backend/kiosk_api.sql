@@ -6,7 +6,6 @@ AS $function$
 declare s kiosk_private.sessions%rowtype;a kiosk_private.accounts%rowtype;v kiosk_private.visits%rowtype;tok text;target text;result jsonb;days int;mx int;cnt int;query_date date;query_text text;page_no int;page_size int;visit_mode text;where_start timestamptz;where_end timestamptz;
 begin
  select retention_days,max_number into days,mx from kiosk_private.settings where id;
- if days>0 then delete from kiosk_private.visits where status in ('done','cancelled') and created<now()-make_interval(days=>days);end if;
  delete from kiosk_private.sessions where expires<now();
  if op='session' then
   tok=encode(extensions.gen_random_bytes(32),'hex');
