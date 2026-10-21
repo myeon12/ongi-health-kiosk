@@ -131,8 +131,8 @@ begin
  end if;
  update kiosk_private.usage_month set requests=requests+1 where month=period;
  soft=u.requests>=120000 or u.estimated_bytes>=429496729;
- if coalesce(payload->>'auto','false')='true' and (soft or extract(isodow from now() at time zone 'Asia/Seoul')>5 or extract(hour from now() at time zone 'Asia/Seoul')<7 or extract(hour from now() at time zone 'Asia/Seoul')>=18) then
-  out=jsonb_build_object('error',case when soft then '사용량 절약 모드예요. 필요한 경우 수동 조회해 주세요.' else '자동 갱신은 평일 07:00~18:00에만 작동해요.' end,'code',429,'autoPaused',true,'budgetSoft',soft);
+ if coalesce(payload->>'auto','false')='true' and (soft or extract(isodow from now() at time zone 'Asia/Seoul')>5 or (now() at time zone 'Asia/Seoul')::time<time '09:00' or (now() at time zone 'Asia/Seoul')::time>=time '14:40') then
+  out=jsonb_build_object('error',case when soft then '사용량 절약 모드예요. 필요한 경우 수동 조회해 주세요.' else '자동 갱신은 평일 09:00~14:40에만 작동해요.' end,'code',429,'autoPaused',true,'budgetSoft',soft);
  else
   out=kiosk_private.kiosk_api_impl(op,payload,session_token);
  end if;
