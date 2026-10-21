@@ -13,17 +13,20 @@ Deno.serve(async req=>{
   if(op==='checkin'){
    if(!Number.isInteger(payload.grade)||payload.grade<1||payload.grade>6||!Number.isInteger(payload.room)||payload.room<1||payload.room>9||!Number.isInteger(payload.num)||payload.num<1||payload.num>60||!Array.isArray(payload.symptoms)||!payload.symptoms.length||payload.symptoms.length>12||payload.symptoms.some((x:unknown)=>!symptoms.includes(x as string))||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id||''))return send({error:'선택한 내용을 확인해 주세요.'},400);
   }
-  if(op==='login'&&(typeof payload.password!=='string'||payload.password.length>200))return send({error:'계정 정보를 확인해 주세요.'},400);
+  if(op==='login'&&(!['mw1','mw2'].includes(payload.username)||typeof payload.password!=='string'||payload.password.length>200))return send({error:'계정 정보를 확인해 주세요.'},400);
   if(op==='status'&&(!Number.isInteger(payload.version)||!['waiting','treating','done','cancelled'].includes(payload.status)))return send({error:'변경 요청을 확인해 주세요.'},400);
   if(op==='reason'&&(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id||'')||!Number.isInteger(payload.version)||!Array.isArray(payload.symptoms)||payload.symptoms.length<1||payload.symptoms.length>12||payload.symptoms.some((x:unknown)=>typeof x!=='string'||!x.trim()||x.trim().length>200)))return send({error:'사유는 1~12개, 각 200자 이내로 입력해 주세요.'},400);
   if(op==='delete_visit'&&(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id||'')||!Number.isInteger(payload.version)||payload.confirm!=='delete'))return send({error:'삭제 요청을 확인해 주세요.'},400);
   if(op==='visits'&&((payload.mode!==undefined&&!['active','history','settings'].includes(payload.mode))||(payload.query!==undefined&&(typeof payload.query!=='string'||payload.query.length>200))||(payload.page!==undefined&&(!Number.isInteger(payload.page)||payload.page<0||payload.page>100000))||(payload.limit!==undefined&&(!Number.isInteger(payload.limit)||payload.limit<1||payload.limit>200))||(payload.date!==undefined&&(typeof payload.date!=='string'||(payload.date!==''&&(!/^\d{4}-\d{2}-\d{2}$/.test(payload.date)||Number.isNaN(Date.parse(payload.date))||new Date(payload.date).toISOString().slice(0,10)!==payload.date))))||(payload.status!==undefined&&!['','waiting','treating','done','cancelled'].includes(payload.status))||(payload.beforeSeq!==undefined&&!/^\d{1,18}$/.test(String(payload.beforeSeq)))))return send({error:'조회 조건을 확인해 주세요.'},400);
+  if(op==='session'&&![1,2].includes(payload.clinic))return send({error:'보건실 전용 주소로 다시 접속해 주세요.'},400);
+  if(payload.auto!==undefined&&typeof payload.auto!=='boolean')return send({error:'요청을 확인해 주세요.'},400);
+  if(payload.knownRevision!==undefined&&(typeof payload.knownRevision!=='string'||payload.knownRevision.length>64))return send({error:'요청을 확인해 주세요.'},400);
   const token=req.headers.get('x-kiosk-session')||'';
   if(op!=='session'&&!/^[a-f0-9]{64}$/.test(token))return send({error:'접속 시간이 만료됐어요. 화면을 다시 열어 주세요.'},401);
   const res=await fetch(url+'/rest/v1/rpc/kiosk_api',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({op,payload,session_token:token})});
   if(!res.ok){await res.text();return send({error:'요청을 처리하지 못했어요. 같은 화면에서 다시 시도해 주세요.'},500)}
   const out=await res.json();if(out.error)return send(out,out.code||400);
-  if(op==='public')out.symptoms=symptoms;
+  if(op==='public'&&!payload.auto)out.symptoms=symptoms;
   return send(out);
  }catch{return send({error:'요청을 처리하지 못했어요.'},400)}
 });
